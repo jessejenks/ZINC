@@ -1,25 +1,23 @@
+import type { List } from "../utils/list";
+import * as list from "../utils/list";
 import * as ast from "./core";
-import type { List } from "./list";
-import * as list from "./list";
 
 export const enum InstructionKind {
 	Access,
 	Push,
-	Reduce,
 	Grab,
 }
 
 export type Access = { kind: InstructionKind.Access; n: number };
 export type Push = { kind: InstructionKind.Push; addr: number };
-export type Reduce = { kind: InstructionKind.Reduce; addr: number };
 export type Grab = { kind: InstructionKind.Grab };
-export type Instruction = Access | Push | Reduce | Grab;
+export type Instruction = Access | Push | Grab;
 
 export class Compiler {
 	protected instructions: Instruction[];
 	protected readbackTable: ast.Expression[];
 
-	constructor(protected strict = true) {
+	constructor() {
 		this.instructions = [];
 		this.readbackTable = [];
 	}
@@ -46,17 +44,10 @@ export class Compiler {
 				this.instructions.push({ kind: InstructionKind.Access, n: expr.index });
 				break;
 			case ast.ExpressionKind.Application:
-				if (!this.strict) {
-					this.instructions.push({ kind: InstructionKind.Push, addr: -1 });
-					this.compileExpr(expr.left);
-					const addrRight = this.compileExpr(expr.right);
-					(this.instructions[addr] as Push).addr = addrRight;
-				} else {
-					this.instructions.push({ kind: InstructionKind.Reduce, addr: -1 });
-					this.compileExpr(expr.left);
-					const addrRight = this.compileExpr(expr.right);
-					(this.instructions[addr] as Reduce).addr = addrRight;
-				}
+				this.instructions.push({ kind: InstructionKind.Push, addr: -1 });
+				this.compileExpr(expr.left);
+				const addrRight = this.compileExpr(expr.right);
+				(this.instructions[addr] as Push).addr = addrRight;
 				break;
 			case ast.ExpressionKind.Abstraction:
 				this.instructions.push({ kind: InstructionKind.Grab });
@@ -87,14 +78,6 @@ export class Compiler {
 						`[[ ${ast.toString(expr)} ]]`,
 					);
 					break;
-				case InstructionKind.Reduce:
-					console.debug(
-						i.toString().padStart(3, "0"),
-						`Reduce(${instr.addr})`.padEnd(12),
-						"<-",
-						`[[ ${ast.toString(expr)} ]]`,
-					);
-					break;
 				case InstructionKind.Grab:
 					console.debug(i.toString().padStart(3, "0"), `Grab`.padEnd(12), "<-", `[[ ${ast.toString(expr)} ]]`);
 					break;
@@ -103,7 +86,7 @@ export class Compiler {
 	}
 }
 
-export type Closure = { addr: number; env: Environment; marked: boolean };
+export type Closure = { addr: number; env: Environment };
 export type Environment = List<Closure>;
 
 export class RuntimeError extends Error {
@@ -235,12 +218,8 @@ export class Machine {
 				return true;
 			}
 			case InstructionKind.Push:
-				this.stack = list.cons({ addr: instr.addr, env: this.env, marked: false }, this.stack);
+				this.stack = list.cons({ addr: instr.addr, env: this.env }, this.stack);
 				this.pc++;
-				return true;
-			case InstructionKind.Reduce:
-				this.stack = list.cons({ addr: this.pc + 1, env: this.env, marked: true }, this.stack);
-				this.pc = instr.addr;
 				return true;
 			case InstructionKind.Grab: {
 				if (list.isEmpty(this.stack)) {
@@ -249,15 +228,8 @@ export class Machine {
 				}
 				let closure: Closure;
 				[closure, this.stack] = list.pop(this.stack);
-				if (closure.marked) {
-					// note: returns to same location, so not pc + 1
-					this.stack = list.cons({ addr: this.pc, env: this.env, marked: false }, this.stack);
-					this.pc = closure.addr;
-					this.env = closure.env;
-				} else {
-					this.env = list.cons(closure, this.env);
-					this.pc++;
-				}
+				this.env = list.cons(closure, this.env);
+				this.pc++;
 				return true;
 			}
 		}

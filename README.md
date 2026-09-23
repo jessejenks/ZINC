@@ -20,8 +20,8 @@ Examples are available in the examples directory. These can be built and run sep
 
 ```sh
 npm run build:examples
-node dist/examples/reduce.cjs
-node dist/examples/krivine.cjs
+node dist/examples/pure/reduce.cjs
+node dist/examples/pure/krivine.cjs
 ```
 
 ### Tests

@@ -1,4 +1,4 @@
-import { ast, reduce, zinc } from "../src";
+import { ast, reduce, zinc } from "../../src/pure";
 import terms from "./example-terms";
 
 const compiler = new zinc.Compiler();

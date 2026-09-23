@@ -1,6 +1,6 @@
+import type { List } from "../utils/list";
+import * as list from "../utils/list";
 import * as ast from "./core";
-import type { List } from "./list";
-import * as list from "./list";
 
 export const enum InstructionKind {
 	Access,

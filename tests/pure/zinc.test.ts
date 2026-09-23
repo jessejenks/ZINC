@@ -1,7 +1,7 @@
 import { deepStrictEqual } from "node:assert";
 import test, { suite } from "node:test";
-import { ast, reduce, zinc } from "../src";
-import * as list from "../src/list";
+import { ast, reduce, zinc } from "../../src/pure";
+import * as list from "../../src/utils/list";
 
 const { variable: v, application: app, abstraction: abs } = ast;
 
