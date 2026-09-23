@@ -14,6 +14,7 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "build:examples": "rollup -c ./examples/rollup.config.js",
     "build:tests": "rollup -c ./tests/rollup.config.js",
     "test": "npm run build:tests && node --test dist/tests/**/*.test.cjs"
   },
