@@ -102,8 +102,11 @@ const seq = (before: Expression, after: Expression, children: Derivation[]): Seq
 const isAppLeftLambda = (expr: Application): expr is Application & { left: Abstraction } =>
 	ast.isAbstraction(expr.left);
 
+export const betaStep = (left: Abstraction, right: Expression): Expression =>
+	shift(-1, 0, substitute(left.body, 0, shift(1, 0, right)));
+
 const beta = (expr: Application & { left: Abstraction }, reduce: (expr: Expression) => Expression): Expression => {
-	const substituted = shift(-1, 0, substitute(expr.left.body, 0, shift(1, 0, expr.right)));
+	const substituted = betaStep(expr.left, expr.right);
 	return reduce(substituted);
 };
 
