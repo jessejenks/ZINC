@@ -1,4 +1,4 @@
-import { ast } from "../src";
+import { ast } from "../../src/pure";
 
 const terms: ast.Expression[] = [
 	ast.abstraction(ast.variable(0)),

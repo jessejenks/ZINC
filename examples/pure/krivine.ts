@@ -1,4 +1,4 @@
-import { ast, krivine, reduce } from "../src";
+import { ast, krivine, reduce } from "../../src/pure";
 import terms from "./example-terms";
 
 const compiler = new krivine.Compiler();
