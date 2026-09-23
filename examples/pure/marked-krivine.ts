@@ -1,4 +1,4 @@
-import { ast, markedKrivine, reduce } from "../src";
+import { ast, markedKrivine, reduce } from "../../src/pure";
 import terms from "./example-terms";
 
 const compiler = new markedKrivine.Compiler();
