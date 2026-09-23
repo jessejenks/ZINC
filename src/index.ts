@@ -1,3 +1,2 @@
-export const foo = 1;
-
-console.log("hello world");
+export * as ast from "./core";
+export * as reduce from "./reduce";
