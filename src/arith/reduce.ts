@@ -1,0 +1,662 @@
+import type { Abstraction, Add, Application, Expression, Int, Mul, Negate, Sub } from "./core";
+import * as ast from "./core";
+
+export function shift(i: number, c: number, expr: Expression): Expression {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+			return expr;
+		case ast.ExpressionKind.Variable:
+			if (expr.index < c) {
+				return expr;
+			}
+			return ast.variable(expr.index + i);
+		case ast.ExpressionKind.Application:
+			return ast.application(shift(i, c, expr.left), shift(i, c, expr.right));
+		case ast.ExpressionKind.Abstraction:
+			return ast.abstraction(shift(i, c + 1, expr.body));
+		case ast.ExpressionKind.Negate:
+			return ast.negate(shift(i, c, expr.expr));
+		case ast.ExpressionKind.Add:
+			return ast.add(shift(i, c, expr.left), shift(i, c, expr.right));
+		case ast.ExpressionKind.Sub:
+			return ast.sub(shift(i, c, expr.left), shift(i, c, expr.right));
+		case ast.ExpressionKind.Mul:
+			return ast.mul(shift(i, c, expr.left), shift(i, c, expr.right));
+	}
+}
+
+export function substitute(t: Expression, n: number, e: Expression): Expression {
+	switch (t.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+			return t;
+		case ast.ExpressionKind.Variable:
+			return t.index === n ? e : t;
+		case ast.ExpressionKind.Application:
+			return ast.application(substitute(t.left, n, e), substitute(t.right, n, e));
+		case ast.ExpressionKind.Abstraction:
+			return ast.abstraction(substitute(t.body, n + 1, shift(1, 0, e)));
+		case ast.ExpressionKind.Negate:
+			return ast.negate(substitute(t.expr, n, e));
+		case ast.ExpressionKind.Add:
+			return ast.add(substitute(t.left, n, e), substitute(t.right, n, e));
+		case ast.ExpressionKind.Sub:
+			return ast.sub(substitute(t.left, n, e), substitute(t.right, n, e));
+		case ast.ExpressionKind.Mul:
+			return ast.mul(substitute(t.left, n, e), substitute(t.right, n, e));
+	}
+}
+
+const enum DerivationKind {
+	Id,
+	Beta,
+	Mu,
+	Nu,
+	Xi,
+	Seq,
+	Neg,
+	Add,
+	Sub,
+	Mul,
+}
+
+const DERIVATION_RULE_NAMES: Record<DerivationKind, string> = {
+	[DerivationKind.Id]: "id",
+	[DerivationKind.Beta]: "β",
+	[DerivationKind.Mu]: "μ",
+	[DerivationKind.Nu]: "ν",
+	[DerivationKind.Xi]: "ξ",
+	[DerivationKind.Seq]: "seq",
+	[DerivationKind.Neg]: "neg",
+	[DerivationKind.Add]: "add",
+	[DerivationKind.Sub]: "sub",
+	[DerivationKind.Mul]: "mul",
+};
+
+type IdDerivation = {
+	rule: DerivationKind.Id;
+	before?: undefined;
+	after: Expression;
+};
+
+type BetaDerivation = {
+	rule: DerivationKind.Beta;
+	before: Expression;
+	substituted: Expression;
+	after: Expression;
+	child: Derivation;
+};
+
+type MuDerivation = {
+	rule: DerivationKind.Mu;
+	before: Application;
+	after: Application;
+	child: Derivation;
+};
+
+type NuDerivation = {
+	rule: DerivationKind.Nu;
+	before: Application;
+	after: Application;
+	child: Derivation;
+};
+
+type XiDerivation = {
+	rule: DerivationKind.Xi;
+	before: Abstraction;
+	after: Abstraction;
+	child: Derivation;
+};
+
+type SeqDerivation = {
+	rule: DerivationKind.Seq;
+	before: Expression;
+	after: Expression;
+	children: Derivation[];
+};
+
+type NegDerivation = {
+	rule: DerivationKind.Neg;
+	before: Negate;
+	after: Int | Negate;
+	child: Derivation;
+};
+
+type AddDerivation = {
+	rule: DerivationKind.Add;
+	before: Add;
+	after: Int | Add;
+	children: [Derivation, Derivation];
+};
+
+type SubDerivation = {
+	rule: DerivationKind.Sub;
+	before: Sub;
+	after: Int | Sub;
+	children: [Derivation, Derivation];
+};
+
+type MulDerivation = {
+	rule: DerivationKind.Mul;
+	before: Mul;
+	after: Int | Mul;
+	children: [Derivation, Derivation];
+};
+
+export type Derivation =
+	| IdDerivation
+	| BetaDerivation
+	| XiDerivation
+	| MuDerivation
+	| NuDerivation
+	| SeqDerivation
+	| NegDerivation
+	| AddDerivation
+	| SubDerivation
+	| MulDerivation;
+
+const id = (expr: Expression): IdDerivation => ({
+	rule: DerivationKind.Id,
+	after: expr,
+});
+
+const seq = (before: Expression, after: Expression, children: Derivation[]): SeqDerivation => ({
+	rule: DerivationKind.Seq,
+	before,
+	after,
+	children,
+});
+
+const isAppLeftLambda = (expr: Application): expr is Application & { left: Abstraction } =>
+	ast.isAbstraction(expr.left);
+
+export const betaStep = (left: Abstraction, right: Expression): Expression =>
+	shift(-1, 0, substitute(left.body, 0, shift(1, 0, right)));
+
+const beta = (expr: Application & { left: Abstraction }, reduce: (expr: Expression) => Expression): Expression => {
+	const substituted = betaStep(expr.left, expr.right);
+	return reduce(substituted);
+};
+
+const betaDerive = (
+	expr: Application & { left: Abstraction },
+	reduce: (expr: Expression) => Derivation,
+): BetaDerivation => {
+	const substituted = shift(-1, 0, substitute(expr.left.body, 0, shift(1, 0, expr.right)));
+	const child = reduce(substituted);
+	return {
+		rule: DerivationKind.Beta,
+		before: expr,
+		substituted,
+		after: child.after,
+		child,
+	};
+};
+
+const mu = (expr: Application, reduce: (expr: Expression) => Expression): Application => {
+	return ast.application(reduce(expr.left), expr.right);
+};
+
+const muDerive = (expr: Application, reduce: (expr: Expression) => Derivation): MuDerivation => {
+	const child = reduce(expr.left);
+	return {
+		rule: DerivationKind.Mu,
+		before: expr,
+		after: ast.application(child.after, expr.right),
+		child,
+	};
+};
+
+const nu = (expr: Application, reduce: (expr: Expression) => Expression): Application => {
+	return ast.application(expr.left, reduce(expr.right));
+};
+
+const nuDerive = (expr: Application, reduce: (expr: Expression) => Derivation): NuDerivation => {
+	const child = reduce(expr.right);
+	return {
+		rule: DerivationKind.Nu,
+		before: expr,
+		after: ast.application(expr.left, child.after),
+		child,
+	};
+};
+
+const xi = (expr: Abstraction, reduce: (expr: Expression) => Expression): Abstraction => {
+	return ast.abstraction(reduce(expr.body));
+};
+
+const xiDerive = (expr: Abstraction, reduce: (expr: Expression) => Derivation): XiDerivation => {
+	const child = reduce(expr.body);
+	return {
+		rule: DerivationKind.Xi,
+		before: expr,
+		after: ast.abstraction(child.after),
+		child,
+	};
+};
+
+const negate = (expr: Negate, reduce: (expr: Expression) => Expression): Int | Negate => {
+	const child = reduce(expr.expr);
+	if (ast.isInt(child)) {
+		return ast.int(-child.value);
+	}
+	return ast.negate(child);
+};
+
+const negateDerive = (expr: Negate, reduce: (expr: Expression) => Derivation): NegDerivation => {
+	const child = reduce(expr.expr);
+	return {
+		rule: DerivationKind.Neg,
+		before: expr,
+		after: ast.isInt(child.after) ? ast.int(-child.after.value) : ast.negate(child.after),
+		child,
+	};
+};
+
+const add = (expr: Add, reduce: (expr: Expression) => Expression): Int | Add => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	if (ast.isInt(leftChild) && ast.isInt(rightChild)) {
+		return ast.int(leftChild.value + rightChild.value);
+	}
+	return ast.add(leftChild, rightChild);
+};
+
+const addDerive = (expr: Add, reduce: (expr: Expression) => Derivation): AddDerivation => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	return {
+		rule: DerivationKind.Add,
+		before: expr,
+		after:
+			ast.isInt(leftChild.after) && ast.isInt(rightChild.after)
+				? ast.int(leftChild.after.value + rightChild.after.value)
+				: ast.add(leftChild.after, rightChild.after),
+		children: [leftChild, rightChild],
+	};
+};
+
+const sub = (expr: Sub, reduce: (expr: Expression) => Expression): Int | Sub => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	if (ast.isInt(leftChild) && ast.isInt(rightChild)) {
+		return ast.int(leftChild.value - rightChild.value);
+	}
+	return ast.sub(leftChild, rightChild);
+};
+
+const subDerive = (expr: Sub, reduce: (expr: Expression) => Derivation): SubDerivation => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	return {
+		rule: DerivationKind.Sub,
+		before: expr,
+		after:
+			ast.isInt(leftChild.after) && ast.isInt(rightChild.after)
+				? ast.int(leftChild.after.value - rightChild.after.value)
+				: ast.sub(leftChild.after, rightChild.after),
+		children: [leftChild, rightChild],
+	};
+};
+
+const mul = (expr: Mul, reduce: (expr: Expression) => Expression): Int | Mul => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	if (ast.isInt(leftChild) && ast.isInt(rightChild)) {
+		return ast.int(leftChild.value * rightChild.value);
+	}
+	return ast.mul(leftChild, rightChild);
+};
+
+const mulDerive = (expr: Mul, reduce: (expr: Expression) => Derivation): MulDerivation => {
+	const leftChild = reduce(expr.left);
+	const rightChild = reduce(expr.right);
+	return {
+		rule: DerivationKind.Mul,
+		before: expr,
+		after:
+			ast.isInt(leftChild.after) && ast.isInt(rightChild.after)
+				? ast.int(leftChild.after.value * rightChild.after.value)
+				: ast.mul(leftChild.after, rightChild.after),
+		children: [leftChild, rightChild],
+	};
+};
+
+export function derivationToString(derivation: Derivation): string {
+	const lines: string[] = [];
+	derivationToStringInner(0, lines, derivation);
+	return lines.join("\n");
+}
+
+function derivationToStringInner(depth: number, lines: string[], derivation: Derivation) {
+	if (derivation.rule === DerivationKind.Id) {
+		lines.push(
+			DERIVATION_RULE_NAMES[DerivationKind.Id].padEnd(3).padStart(3 + 2 * depth, "-") +
+				" = " +
+				ast.toString(derivation.after),
+		);
+		return;
+	}
+	if (derivation.rule === DerivationKind.Seq) {
+		for (let i = 0; i < derivation.children.length; i++) {
+			derivationToStringInner(depth, lines, derivation.children[i]);
+		}
+		return;
+	}
+	if (
+		derivation.rule === DerivationKind.Add ||
+		derivation.rule === DerivationKind.Sub ||
+		derivation.rule === DerivationKind.Mul
+	) {
+		lines.push(
+			DERIVATION_RULE_NAMES[derivation.rule].padEnd(3).padStart(3 + 2 * depth, "-") +
+				" > " +
+				ast.toString(derivation.before),
+		);
+		for (let i = 0; i < derivation.children.length; i++) {
+			derivationToStringInner(depth + 1, lines, derivation.children[i]);
+		}
+		lines.push(
+			DERIVATION_RULE_NAMES[derivation.rule].padEnd(3).padStart(3 + 2 * depth, "-") +
+				" < " +
+				ast.toString(derivation.after),
+		);
+		return;
+	}
+	lines.push(
+		DERIVATION_RULE_NAMES[derivation.rule].padEnd(3).padStart(3 + 2 * depth, "-") +
+			" > " +
+			ast.toString(derivation.before),
+	);
+	if (derivation.rule === DerivationKind.Beta) {
+		lines.push(
+			`${DERIVATION_RULE_NAMES[derivation.rule]}*`.padEnd(3).padStart(3 + 2 * depth, "-") +
+				" = " +
+				ast.toString(derivation.substituted),
+		);
+	}
+	derivationToStringInner(depth + 1, lines, derivation.child);
+	lines.push(
+		DERIVATION_RULE_NAMES[derivation.rule].padEnd(3).padStart(3 + 2 * depth, "-") +
+			" < " +
+			ast.toString(derivation.after),
+	);
+}
+
+export const normalOrder = (expr: Expression): Expression => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return expr;
+		case ast.ExpressionKind.Abstraction:
+			return xi(expr, normalOrder);
+		case ast.ExpressionKind.Application: {
+			if (isAppLeftLambda(expr)) {
+				return beta(expr, normalOrder);
+			}
+			const left = mu(expr, normalOrder);
+			if (isAppLeftLambda(left)) {
+				return beta(left, normalOrder);
+			}
+			return nu(left, normalOrder);
+		}
+		case ast.ExpressionKind.Negate:
+			return negate(expr, normalOrder);
+		case ast.ExpressionKind.Add:
+			return add(expr, normalOrder);
+		case ast.ExpressionKind.Sub:
+			return sub(expr, normalOrder);
+		case ast.ExpressionKind.Mul:
+			return mul(expr, normalOrder);
+	}
+};
+
+export const normalOrderDerive = (expr: Expression): Derivation => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return id(expr);
+		case ast.ExpressionKind.Abstraction:
+			return xiDerive(expr, normalOrderDerive);
+		case ast.ExpressionKind.Application: {
+			if (isAppLeftLambda(expr)) {
+				return betaDerive(expr, normalOrderDerive);
+			}
+			const left = muDerive(expr, normalOrderDerive);
+			if (isAppLeftLambda(left.after)) {
+				const post = betaDerive(left.after, normalOrderDerive);
+				return seq(expr, post.after, [left, post]);
+			}
+			return nuDerive(left.after, normalOrderDerive);
+		}
+		case ast.ExpressionKind.Negate:
+			return negateDerive(expr, normalOrderDerive);
+		case ast.ExpressionKind.Add:
+			return addDerive(expr, normalOrderDerive);
+		case ast.ExpressionKind.Sub:
+			return subDerive(expr, normalOrderDerive);
+		case ast.ExpressionKind.Mul:
+			return mulDerive(expr, normalOrderDerive);
+	}
+};
+
+export const callByName = (expr: Expression): Expression => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+		case ast.ExpressionKind.Abstraction:
+			return expr;
+		case ast.ExpressionKind.Application: {
+			const left = mu(expr, callByName);
+			if (isAppLeftLambda(left)) {
+				return beta(left, callByName);
+			}
+			return left;
+		}
+		case ast.ExpressionKind.Negate:
+			return negate(expr, callByName);
+		case ast.ExpressionKind.Add:
+			return add(expr, callByName);
+		case ast.ExpressionKind.Sub:
+			return sub(expr, callByName);
+		case ast.ExpressionKind.Mul:
+			return mul(expr, callByName);
+	}
+};
+
+export const callByNameDerive = (expr: Expression): Derivation => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+		case ast.ExpressionKind.Abstraction:
+			return id(expr);
+		case ast.ExpressionKind.Application: {
+			const left = muDerive(expr, callByNameDerive);
+			if (isAppLeftLambda(left.after)) {
+				const post = betaDerive(left.after, callByNameDerive);
+				return seq(expr, post.after, [left, post]);
+			}
+			return left;
+		}
+		case ast.ExpressionKind.Negate:
+			return negateDerive(expr, callByNameDerive);
+		case ast.ExpressionKind.Add:
+			return addDerive(expr, callByNameDerive);
+		case ast.ExpressionKind.Sub:
+			return subDerive(expr, callByNameDerive);
+		case ast.ExpressionKind.Mul:
+			return mulDerive(expr, callByNameDerive);
+	}
+};
+
+export const callByValue = (expr: Expression): Expression => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+		case ast.ExpressionKind.Abstraction:
+			return expr;
+		case ast.ExpressionKind.Application: {
+			const left = mu(expr, callByValue);
+			const right = nu(left, callByValue);
+			if (isAppLeftLambda(right)) {
+				return beta(right, callByValue);
+			}
+			return right;
+		}
+		case ast.ExpressionKind.Negate:
+			return negate(expr, callByValue);
+		case ast.ExpressionKind.Add:
+			return add(expr, callByValue);
+		case ast.ExpressionKind.Sub:
+			return sub(expr, callByValue);
+		case ast.ExpressionKind.Mul:
+			return mul(expr, callByValue);
+	}
+};
+
+export const callByValueDerive = (expr: Expression): Derivation => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+		case ast.ExpressionKind.Abstraction:
+			return id(expr);
+		case ast.ExpressionKind.Application: {
+			const left = muDerive(expr, callByValueDerive);
+			const right = nuDerive(left.after, callByValueDerive);
+			if (isAppLeftLambda(right.after)) {
+				const post = betaDerive(right.after, callByValueDerive);
+				return seq(expr, post.after, [left, right, post]);
+			}
+			return seq(expr, right.after, [left, right]);
+		}
+		case ast.ExpressionKind.Negate:
+			return negateDerive(expr, callByValueDerive);
+		case ast.ExpressionKind.Add:
+			return addDerive(expr, callByValueDerive);
+		case ast.ExpressionKind.Sub:
+			return subDerive(expr, callByValueDerive);
+		case ast.ExpressionKind.Mul:
+			return mulDerive(expr, callByValueDerive);
+	}
+};
+
+export const applicativeOrder = (expr: Expression): Expression => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return expr;
+		case ast.ExpressionKind.Abstraction:
+			return xi(expr, applicativeOrder);
+		case ast.ExpressionKind.Application: {
+			const left = mu(expr, applicativeOrder);
+			const right = nu(left, applicativeOrder);
+			if (isAppLeftLambda(right)) {
+				return beta(right, applicativeOrder);
+			}
+			return right;
+		}
+		case ast.ExpressionKind.Negate:
+			return negate(expr, applicativeOrder);
+		case ast.ExpressionKind.Add:
+			return add(expr, applicativeOrder);
+		case ast.ExpressionKind.Sub:
+			return sub(expr, applicativeOrder);
+		case ast.ExpressionKind.Mul:
+			return mul(expr, applicativeOrder);
+	}
+};
+
+export const applicativeOrderDerive = (expr: Expression): Derivation => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return id(expr);
+		case ast.ExpressionKind.Abstraction:
+			return xiDerive(expr, applicativeOrderDerive);
+		case ast.ExpressionKind.Application: {
+			const left = muDerive(expr, applicativeOrderDerive);
+			const right = nuDerive(left.after, applicativeOrderDerive);
+			if (isAppLeftLambda(right.after)) {
+				const post = betaDerive(right.after, applicativeOrderDerive);
+				return seq(expr, post.after, [left, right, post]);
+			}
+			return seq(expr, right.after, [left, right]);
+		}
+		case ast.ExpressionKind.Negate:
+			return negateDerive(expr, applicativeOrderDerive);
+		case ast.ExpressionKind.Add:
+			return addDerive(expr, applicativeOrderDerive);
+		case ast.ExpressionKind.Sub:
+			return subDerive(expr, applicativeOrderDerive);
+		case ast.ExpressionKind.Mul:
+			return mulDerive(expr, applicativeOrderDerive);
+	}
+};
+
+export const headReduction = (expr: Expression): Expression => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return expr;
+		case ast.ExpressionKind.Abstraction:
+			return xi(expr, headReduction);
+		case ast.ExpressionKind.Application: {
+			if (isAppLeftLambda(expr)) {
+				return beta(expr, headReduction);
+			}
+			const left = mu(expr, headReduction);
+			if (isAppLeftLambda(left)) {
+				return beta(left, headReduction);
+			}
+			return left;
+		}
+		case ast.ExpressionKind.Negate:
+			return negate(expr, headReduction);
+		case ast.ExpressionKind.Add:
+			return add(expr, headReduction);
+		case ast.ExpressionKind.Sub:
+			return sub(expr, headReduction);
+		case ast.ExpressionKind.Mul:
+			return mul(expr, headReduction);
+	}
+};
+
+export const headReductionDerive = (expr: Expression): Derivation => {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Unit:
+		case ast.ExpressionKind.Int:
+		case ast.ExpressionKind.Variable:
+			return id(expr);
+		case ast.ExpressionKind.Abstraction:
+			return xiDerive(expr, headReductionDerive);
+		case ast.ExpressionKind.Application: {
+			if (isAppLeftLambda(expr)) {
+				return betaDerive(expr, headReductionDerive);
+			}
+			const left = muDerive(expr, headReductionDerive);
+			if (isAppLeftLambda(left.after)) {
+				const post = betaDerive(left.after, headReductionDerive);
+				return seq(expr, post.after, [left, post]);
+			}
+			return left;
+		}
+		case ast.ExpressionKind.Negate:
+			return negateDerive(expr, headReductionDerive);
+		case ast.ExpressionKind.Add:
+			return addDerive(expr, headReductionDerive);
+		case ast.ExpressionKind.Sub:
+			return subDerive(expr, headReductionDerive);
+		case ast.ExpressionKind.Mul:
+			return mulDerive(expr, headReductionDerive);
+	}
+};
