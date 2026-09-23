@@ -1,16 +1,14 @@
-import { ast, reduce, zinc } from "../../src/arith";
-import terms from "./example-terms";
+import { ast, elaborate, parser, reduce, zinc } from "../../src/arith";
+import surfaceStrings from "./example-surface-strings";
+import coreTerms from "./example-terms";
 
 const compiler = new zinc.Compiler();
 const machine = new zinc.Machine();
-for (let i = 0; i < terms.length; i++) {
-	if (i > 0) {
-		console.log();
-	}
+function runTerm(term: ast.Expression) {
 	console.log("=== call-by-value ===");
-	console.log(ast.toString(terms[i]), "->", ast.toString(reduce.callByValue(terms[i])));
+	console.log(ast.toString(term), "->", ast.toString(reduce.callByValue(term)));
 	console.log("=== ZINC          ===");
-	compiler.compile(terms[i]);
+	compiler.compile(term);
 	compiler.printCompilation();
 	machine.load(compiler.getInstructions());
 
@@ -36,7 +34,7 @@ for (let i = 0; i < terms.length; i++) {
 	if (!didError) {
 		try {
 			const finalExpr = machine.readback(compiler.getReadback());
-			console.log(ast.toString(terms[i]), "->", ast.toString(finalExpr));
+			console.log(ast.toString(term), "->", ast.toString(finalExpr));
 		} catch (e) {
 			if (e instanceof zinc.RuntimeError) {
 				console.error("Error", e.message);
@@ -45,4 +43,22 @@ for (let i = 0; i < terms.length; i++) {
 			}
 		}
 	}
+}
+
+for (let i = 0; i < coreTerms.length; i++) {
+	if (i > 0) {
+		console.log();
+	}
+	runTerm(coreTerms[i]);
+}
+
+const p = new parser.Parser();
+for (let i = 0; i < surfaceStrings.length; i++) {
+	if (i > 0) {
+		console.log();
+	}
+	console.log("=== input         ===");
+	console.log(surfaceStrings[i]);
+	const term = elaborate.surfaceToCore(p.parse(surfaceStrings[i]));
+	runTerm(term);
 }
