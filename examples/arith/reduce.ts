@@ -1,4 +1,4 @@
-import { ast, reduce } from "../../src/pure";
+import { ast, reduce } from "../../src/arith";
 import terms from "./example-terms";
 
 const ZERO = ast.abstraction(ast.abstraction(ast.variable(0)));
