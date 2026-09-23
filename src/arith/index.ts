@@ -6,3 +6,4 @@ export * as reduce from "./reduce";
 export * as surface from "./surface";
 export * as tokenizer from "./tokenizer";
 export * as zinc from "./zinc";
+export * as zincWasm from "./zinc-wasm";
