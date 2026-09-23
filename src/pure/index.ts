@@ -1,5 +1,10 @@
 export * as ast from "./core";
+export * as elaborate from "./elaborate";
 export * as krivine from "./krivine";
 export * as markedKrivine from "./marked-krivine";
+export * as names from "./names";
+export * as parser from "./parser";
 export * as reduce from "./reduce";
+export * as surface from "./surface";
+export * as tokenizer from "./tokenizer";
 export * as zinc from "./zinc";
