@@ -18,9 +18,9 @@
     "build:tests": "rollup -c ./tests/rollup.config.js",
     "test": "npm run build:tests && node --test dist/tests/**/*.test.cjs"
   },
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "author": "Jesse Jenks",
+  "license": "AGPL-3.0-only",
+  "description": "An implementation of stack machines from the ZINC Experiment by Xavier Leroy, including a compiler to WebAssembly",
   "devDependencies": {
     "@rollup/plugin-terser": "1.0.0",
     "@rollup/plugin-typescript": "12.3.0",
