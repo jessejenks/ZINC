@@ -19,7 +19,7 @@
     "test": "npm run build:tests && node --test dist/tests/**/*.test.cjs"
   },
   "author": "",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "description": "",
   "devDependencies": {
     "@rollup/plugin-terser": "1.0.0",
