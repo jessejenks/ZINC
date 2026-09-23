@@ -1,15 +1,15 @@
-import { ast, krivine, reduce } from "../src";
+import { ast, markedKrivine, reduce } from "../src";
 import terms from "./example-terms";
 
-const compiler = new krivine.Compiler();
-const machine = new krivine.Machine();
+const compiler = new markedKrivine.Compiler();
+const machine = new markedKrivine.Machine();
 for (let i = 0; i < terms.length; i++) {
 	if (i > 0) {
 		console.log();
 	}
-	console.log("=== call-by-name ===");
-	console.log(ast.toString(terms[i]), "->", ast.toString(reduce.callByName(terms[i])));
-	console.log("=== Krivine      ===");
+	console.log("=== call-by-value      ===");
+	console.log(ast.toString(terms[i]), "->", ast.toString(reduce.callByValue(terms[i])));
+	console.log("=== Krivine with marks ===");
 	compiler.compile(terms[i]);
 	compiler.printCompilation();
 	machine.load(compiler.getInstructions());
@@ -24,7 +24,7 @@ for (let i = 0; i < terms.length; i++) {
 			}
 		} catch (e) {
 			didError = true;
-			if (e instanceof krivine.RuntimeError) {
+			if (e instanceof markedKrivine.RuntimeError) {
 				console.error("Error", e.message);
 				break;
 			} else {
@@ -38,7 +38,7 @@ for (let i = 0; i < terms.length; i++) {
 			const finalExpr = machine.readback(compiler.getReadback());
 			console.log(ast.toString(terms[i]), "->", ast.toString(finalExpr));
 		} catch (e) {
-			if (e instanceof krivine.RuntimeError) {
+			if (e instanceof markedKrivine.RuntimeError) {
 				console.error("Error", e.message);
 			} else {
 				throw e;
