@@ -1,4 +1,5 @@
 import { ast, reduce } from "../../src/pure";
+import terms from "./example-terms";
 
 const ZERO = ast.abstraction(ast.abstraction(ast.variable(0)));
 const SUCC = ast.abstraction(
@@ -12,12 +13,7 @@ const SUCC = ast.abstraction(
 	),
 );
 
-const expressions: ast.Expression[] = [
-	ast.variable(0),
-	ast.abstraction(ast.variable(0)),
-	ast.application(ast.abstraction(ast.variable(0)), ast.abstraction(ast.variable(0))),
-	ast.application(SUCC, ZERO),
-];
+const expressions = [...terms, ast.application(SUCC, ZERO)];
 const strategies: [(expr: ast.Expression) => reduce.Derivation, string][] = [
 	[reduce.normalOrderDerive, "normal order"],
 	[reduce.callByNameDerive, "call-by-name"],
