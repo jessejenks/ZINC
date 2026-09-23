@@ -1,4 +1,4 @@
-import { ast, reduce } from "../src";
+import { ast, reduce } from "../../src/pure";
 
 const ZERO = ast.abstraction(ast.abstraction(ast.variable(0)));
 const SUCC = ast.abstraction(
