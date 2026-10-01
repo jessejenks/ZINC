@@ -1,5 +1,7 @@
 # The ZINC Abstract Machine
 
+![Tests](https://github.com/jessejenks/ZINC/actions/workflows/test.yml/badge.svg)
+
 This project explores lambda calculus evaluation strategies, stack machines, and WebAssembly, based on the descriptions
 of machines from chapter 3 of *The ZINC Experiment*[^1] by Xavier Leroy, which serves as a foundation for the OCaml
 compiler, even to this day.
