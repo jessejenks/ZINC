@@ -45,6 +45,9 @@ export class WASMDecoder {
 				case 7:
 					this.decodeExportSection();
 					break;
+				case 9:
+					this.decodeElementSection();
+					break;
 				case 10:
 					this.decodeCodeSection();
 					break;
@@ -242,7 +245,7 @@ export class WASMDecoder {
 				break;
 			default: {
 				const [offset, value] = ByteReader.s33(this.bytes, this.index);
-				this.printByte(`typeidx (as s33?) ${value.toString()}`);
+				this.printByte(`typeidx ${value.toString()}`);
 				this.index += offset;
 				break;
 			}
@@ -343,6 +346,34 @@ export class WASMDecoder {
 		}
 	}
 
+	protected decodeElementSection() {
+		this.sectionPreamble("Element", 9);
+		this.decodeList("num elements", () => this.decodeElement());
+	}
+
+	protected decodeElement() {
+		switch (this.bytes[this.index]) {
+			case 0x02:
+				this.printByte("elem active");
+				this.index++;
+				const [offset, value] = ByteReader.u32(this.bytes, this.index);
+				this.printRange(offset, `elem typeidx ${value.toString()}`);
+				this.index += offset;
+				this.decodeExpression();
+				this.printByte("elemkind (ref func)");
+				this.index++;
+				this.decodeList("functions", () => this.decodeu32("funcidx"));
+				break;
+			case 0x03:
+				this.printByte("elem declare");
+				this.index++;
+				this.printByte("elemkind (ref func)");
+				this.index++;
+				this.decodeList("functions", () => this.decodeu32("funcidx"));
+				break;
+		}
+	}
+
 	protected decodeCodeSection() {
 		this.sectionPreamble("Code", 10);
 		this.decodeList("num functions", (i) => {
@@ -391,50 +422,190 @@ export class WASMDecoder {
 		this.index++;
 	}
 
+	protected decodeBlockType() {
+		const b = this.bytes[this.index];
+		if (b === 0x40) {
+			this.printByte("empty");
+			this.index++;
+			return;
+		}
+		if (0x40 < b && b < 0x80) {
+			this.decodeValType();
+			return;
+		}
+		const [offset, value] = ByteReader.s33(this.bytes, this.index);
+		this.printByte(`typeidx ${value.toString()}`);
+		this.index += offset;
+	}
+
+	protected decodeInstrWithArgs(
+		msg: string,
+		numArgs: number,
+		decoder: (bytes: Uint8Array<ArrayBuffer>, start: number) => [number, bigint],
+	) {
+		const values = new Array<string>(numArgs);
+		let offset: number, value: bigint;
+		let curr = this.index + 1;
+		for (let i = 0; i < numArgs; i++) {
+			[offset, value] = decoder(this.bytes, curr);
+			values[i] = value.toString();
+			curr += offset;
+		}
+		this.printRange(curr - this.index, `${msg} ${values.join(" ")}`);
+		this.index = curr;
+	}
+
 	protected decodeInstruction() {
 		switch (this.bytes[this.index]) {
-			case 0x10: {
-				const [offset, value] = ByteReader.u32(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `call typeidx ${value.toString()}`);
+			case 0x00:
+				this.printByte("unreachable");
 				this.index++;
-				this.index += offset;
+				break;
+			case 0x01:
+				this.printByte("nop");
+				this.index++;
+				break;
+			case 0x02:
+			case 0x03:
+				this.printByte(this.bytes[this.index] === 0x02 ? "block" : "loop");
+				this.index++;
+				this.decodeBlockType();
+				this.decodeExpression();
+				break;
+			case 0x04: {
+				this.printByte("if");
+				this.index++;
+				this.decodeBlockType();
+				let b = this.bytes[this.index];
+				while (b != 0x05 && b != 0x0b) {
+					this.decodeInstruction();
+					b = this.bytes[this.index];
+				}
+				if (b === 0x05) {
+					this.printByte("else");
+					this.index++;
+					this.decodeExpression();
+				} else {
+					this.printByte("endif");
+					this.index++;
+				}
 				break;
 			}
-			case 0x20: {
-				const [offset, value] = ByteReader.u32(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `local.get ${value.toString()}`);
+			case 0x0c:
+				this.printByte("br");
 				this.index++;
-				this.index += offset;
+				this.decodeu32("label");
 				break;
-			}
-			case 0x21: {
-				const [offset, value] = ByteReader.u32(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `local.set ${value.toString()}`);
+			case 0x0d:
+				this.printByte("br if");
 				this.index++;
-				this.index += offset;
+				this.decodeu32("label");
 				break;
-			}
-			case 0x22: {
-				const [offset, value] = ByteReader.u32(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `local.tee ${value.toString()}`);
+			case 0x0f:
+				this.printByte("return");
 				this.index++;
-				this.index += offset;
 				break;
-			}
-			case 0x41: {
-				const [offset, value] = ByteReader.i32(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `i32.const ${value}`);
+			case 0x10:
+				this.printByte("call");
 				this.index++;
-				this.index += offset;
+				this.decodeu32("funcidx");
 				break;
-			}
-			case 0x42: {
-				const [offset, value] = ByteReader.i64(this.bytes, this.index + 1);
-				this.printRange(1 + offset, `i64.const ${value.toString()}`);
+			case 0x11:
+				this.printByte("call indirect");
 				this.index++;
-				this.index += offset;
+				this.decodeu32("typeidx");
+				this.decodeu32("tableidx");
 				break;
-			}
+			case 0x12:
+				this.printByte("return call");
+				this.index++;
+				this.decodeu32("funcidx");
+				break;
+			case 0x13:
+				this.printByte("return call indirect");
+				this.index++;
+				this.decodeu32("typeidx");
+				this.decodeu32("tableidx");
+				break;
+			case 0x14:
+				this.printByte("call ref");
+				this.index++;
+				this.decodeu32("typeidx");
+				break;
+			case 0x15:
+				this.printByte("return call ref");
+				this.index++;
+				this.decodeu32("typeidx");
+				break;
+			case 0x20:
+				this.decodeInstrWithArgs("local.get", 1, ByteReader.u32);
+				break;
+			case 0x21:
+				this.decodeInstrWithArgs("local.set", 1, ByteReader.u32);
+				break;
+			case 0x22:
+				this.decodeInstrWithArgs("local.tee", 1, ByteReader.u32);
+				break;
+			case 0x23:
+				this.printByte("global.get");
+				this.index++;
+				this.decodeu32("globalidx");
+				break;
+			case 0x24:
+				this.printByte("global.set");
+				this.index++;
+				this.decodeu32("globalidx");
+				break;
+			case 0x41:
+				this.decodeInstrWithArgs("i32.const", 1, ByteReader.i32);
+				break;
+			case 0x42:
+				this.decodeInstrWithArgs("i64.const", 1, ByteReader.i64);
+				break;
+			case 0x45:
+				this.printByte("i32.eqz");
+				this.index++;
+				break;
+			case 0x46:
+				this.printByte("i32.eq");
+				this.index++;
+				break;
+			case 0x47:
+				this.printByte("i32.ne");
+				this.index++;
+				break;
+			case 0x48:
+				this.printByte("i32.lt_s");
+				this.index++;
+				break;
+			case 0x49:
+				this.printByte("i32.lt_u");
+				this.index++;
+				break;
+			case 0x4a:
+				this.printByte("i32.gt_s");
+				this.index++;
+				break;
+			case 0x4b:
+				this.printByte("i32.gt_u");
+				this.index++;
+				break;
+			case 0x4c:
+				this.printByte("i32.le_s");
+				this.index++;
+				break;
+			case 0x4d:
+				this.printByte("i32.le_u");
+				this.index++;
+				break;
+			case 0x4e:
+				this.printByte("i32.ge_s");
+				this.index++;
+				break;
+			case 0x4f:
+				this.printByte("i32.ge_u");
+				this.index++;
+				break;
 			case 0x6a:
 				this.printByte("i32.add");
 				this.index++;
@@ -447,11 +618,150 @@ export class WASMDecoder {
 				this.printByte("i32.mul");
 				this.index++;
 				break;
+			case 0x6d:
+				this.printByte("i32.div_s");
+				this.index++;
+				break;
+			case 0x71:
+				this.printByte("i32.and");
+				this.index++;
+				break;
+			case 0x72:
+				this.printByte("i32.or");
+				this.index++;
+				break;
+			case 0x73:
+				this.printByte("i32.xor");
+				this.index++;
+				break;
 			case 0xd0:
 				this.printByte("ref.null");
 				this.index++;
 				this.decodeHeapType();
 				break;
+			case 0xd1:
+				this.printByte("ref.is_null");
+				this.index++;
+				break;
+			case 0xd2:
+				this.printByte("ref.func");
+				this.index++;
+				this.decodeu32("funcidx");
+				break;
+			case 0xfb: {
+				this.printByte("gc");
+				this.index++;
+				const [offset, value] = ByteReader.u32(this.bytes, this.index);
+				switch (value) {
+					case 0n:
+						this.printRange(offset, "struct.new");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 1n:
+						this.printRange(offset, "struct.new_default");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 2n:
+						this.printRange(offset, "struct.get");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						this.decodeu32("fieldidx");
+						break;
+					case 3n:
+						this.printRange(offset, "struct.get_s");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						this.decodeu32("fieldidx");
+						break;
+					case 4n:
+						this.printRange(offset, "struct.get_u");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						this.decodeu32("fieldidx");
+						break;
+					case 5n:
+						this.printRange(offset, "struct.set");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						this.decodeu32("fieldidx");
+						break;
+					case 6n:
+						this.printRange(offset, "array.new");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 7n:
+						this.printRange(offset, "array.new_default");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 8n:
+						this.printRange(offset, "array.new_fixed");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						this.decodeu32("length");
+						break;
+					case 11n:
+						this.printRange(offset, "array.get");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 12n:
+						this.printRange(offset, "array.get_s");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 13n:
+						this.printRange(offset, "array.get_u");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 14n:
+						this.printRange(offset, "array.set");
+						this.index += offset;
+						this.decodeu32("typeidx");
+						break;
+					case 15n:
+						this.printRange(offset, "array.len");
+						this.index += offset;
+						break;
+					case 20n:
+						this.printRange(offset, "ref.test");
+						this.index += offset;
+						this.decodeHeapType();
+						break;
+					case 21n:
+						this.printRange(offset, "ref.test nullable");
+						this.index += offset;
+						this.decodeHeapType();
+						break;
+					case 22n:
+						this.printRange(offset, "ref.cast");
+						this.index += offset;
+						this.decodeHeapType();
+						break;
+					case 23n:
+						this.printRange(offset, "ref.cast nullable");
+						this.index += offset;
+						this.decodeHeapType();
+						break;
+					case 28n:
+						this.printRange(offset, "ref.i31");
+						this.index += offset;
+						break;
+					case 29n:
+						this.printRange(offset, "i31.get_s");
+						this.index += offset;
+						break;
+					case 30n:
+						this.printRange(offset, "i31.get_u");
+						this.index += offset;
+						break;
+				}
+				break;
+			}
 			case 0x0b: // end of expression
 				return;
 			default:

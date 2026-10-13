@@ -537,6 +537,18 @@ function instruction(w: ByteWriter, instr: Instr, labels: Label[]) {
 		case Op.I32MUL:
 			w.u8(0x6c);
 			break;
+		case Op.I32DIV_S:
+			w.u8(0x6d);
+			break;
+		case Op.I32AND:
+			w.u8(0x71);
+			break;
+		case Op.I32OR:
+			w.u8(0x72);
+			break;
+		case Op.I32XOR:
+			w.u8(0x73);
+			break;
 		case Op.I64ADD:
 			w.u8(0x7c);
 			break;
@@ -545,6 +557,18 @@ function instruction(w: ByteWriter, instr: Instr, labels: Label[]) {
 			break;
 		case Op.I64MUL:
 			w.u8(0x7e);
+			break;
+		case Op.I64DIV_S:
+			w.u8(0x7f);
+			break;
+		case Op.I64AND:
+			w.u8(0x83);
+			break;
+		case Op.I64OR:
+			w.u8(0x84);
+			break;
+		case Op.I64XOR:
+			w.u8(0x85);
 			break;
 		case Op.RefNull:
 			w.u8(0xd0);
