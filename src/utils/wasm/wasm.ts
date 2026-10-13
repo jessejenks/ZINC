@@ -216,9 +216,17 @@ export const enum Op {
 	I32ADD,
 	I32SUB,
 	I32MUL,
+	I32DIV_S,
+	I32AND,
+	I32OR,
+	I32XOR,
 	I64ADD,
 	I64SUB,
 	I64MUL,
+	I64DIV_S,
+	I64AND,
+	I64OR,
+	I64XOR,
 }
 
 type SimpleOp =
@@ -258,9 +266,17 @@ type SimpleOp =
 	| Op.I32ADD
 	| Op.I32SUB
 	| Op.I32MUL
+	| Op.I32DIV_S
+	| Op.I32AND
+	| Op.I32OR
+	| Op.I32XOR
 	| Op.I64ADD
 	| Op.I64SUB
-	| Op.I64MUL;
+	| Op.I64MUL
+	| Op.I64DIV_S
+	| Op.I64AND
+	| Op.I64OR
+	| Op.I64XOR;
 
 export type Instr =
 	| { op: SimpleOp }
