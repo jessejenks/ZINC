@@ -1,4 +1,4 @@
-import { ast, elaborate, parser as p, reduce } from "../../src/recursion";
+import { ast, elaborate, parser as p, reduce, renderDerivation } from "../../src/recursion";
 import inputs from "./example-surface-strings";
 
 const strategies: [(expr: ast.Expression) => reduce.Derivation, string][] = [
@@ -10,20 +10,16 @@ const strategies: [(expr: ast.Expression) => reduce.Derivation, string][] = [
 ];
 const parser = new p.Parser();
 for (let i = 0; i < inputs.length; i++) {
-	if (i > 0) {
-		console.log("===");
-	}
+	console.log("===");
 	const parsed = parser.parse(inputs[i]);
-	const { expr } = elaborate.surfaceToCore(parsed);
+	const { expr, names, free } = elaborate.surfaceToCore(parsed);
 	console.log(ast.toString(expr));
 	for (let j = 0; j < strategies.length; j++) {
-		if (j > 0) {
-			console.log("---");
-		}
+		console.log("---");
 		const [f, name] = strategies[j];
 		console.log(name);
 		try {
-			console.log(reduce.derivationToString(f(expr)));
+			console.log(renderDerivation.derivationToString(f(expr), names, free));
 		} catch (e) {
 			console.error(String(e));
 		}

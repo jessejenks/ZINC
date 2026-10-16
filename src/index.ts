@@ -2,6 +2,7 @@ export * as arith from "./arith";
 export * as pure from "./pure";
 export * as recursion from "./recursion";
 export * as list from "./utils/list";
+export * as render from "./utils/render";
 export * as wasmDecoder from "./utils/wasm/decode";
 export * as wasmEncoder from "./utils/wasm/encode";
 export * as wasm from "./utils/wasm/wasm";

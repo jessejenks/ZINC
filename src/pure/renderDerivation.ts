@@ -1,0 +1,287 @@
+import {
+	concat,
+	holePrinter,
+	Piece,
+	piece,
+	Plug,
+	plugAll,
+	Printer,
+	renderDerivation,
+	RenderOptions,
+	Step,
+	stringWriter,
+	Writer,
+} from "../utils/render";
+import * as ast from "./core";
+import type { Binder, Names } from "./names";
+import { copyName, freshName, namesThrough } from "./names";
+import type { BetaDerivation, Derivation } from "./reduce";
+import { DerivationRule } from "./reduce";
+
+type PrunedDerivation =
+	| BetaDerivation
+	| {
+			rule: DerivationRule.Nu | DerivationRule.Mu;
+			before: ast.Application;
+			after: ast.Application;
+			child: PrunedDerivation;
+	  }
+	| {
+			rule: DerivationRule.Xi;
+			before: ast.Abstraction;
+			after: ast.Abstraction;
+			child: PrunedDerivation;
+	  }
+	| {
+			rule: DerivationRule.Seq;
+			before: ast.Expression;
+			after: ast.Expression;
+			children: PrunedDerivation[];
+	  };
+
+export function pruneDerivation(derivation: Derivation): PrunedDerivation | null {
+	switch (derivation.rule) {
+		case DerivationRule.Id:
+			return null;
+		case DerivationRule.Beta:
+			return derivation;
+		case DerivationRule.Nu:
+		case DerivationRule.Mu:
+		case DerivationRule.Xi: {
+			if (derivation.child.rule === DerivationRule.Id) return null;
+			const child = pruneDerivation(derivation.child);
+			if (!child) return null;
+			return { ...derivation, child };
+		}
+		case DerivationRule.Seq: {
+			const children: PrunedDerivation[] = [];
+			for (let i = 0; i < derivation.children.length; i++) {
+				const child = derivation.children[i];
+				if (child.rule === DerivationRule.Id) continue;
+				const prunedChild = pruneDerivation(child);
+				if (!prunedChild) continue;
+				children.push(prunedChild);
+			}
+			if (children.length === 0) return null;
+			return { ...derivation, children };
+		}
+	}
+}
+
+const DERIVATION_RULE_NAMES: Record<DerivationRule, string> = {
+	[DerivationRule.Id]: "id",
+	[DerivationRule.Beta]: "β",
+	[DerivationRule.Nu]: "ν",
+	[DerivationRule.Mu]: "μ",
+	[DerivationRule.Xi]: "ξ",
+	[DerivationRule.Seq]: "seq",
+};
+
+export function derivationToStringSimple(derivation: Derivation, prune = true): string {
+	const lines: string[] = [];
+	if (prune) {
+		const pruned = pruneDerivation(derivation);
+		if (!pruned) {
+			console.warn("Derivation has no steps");
+		} else {
+			derivationToStringSimpleInner(0, lines, pruned);
+			return lines.join("\n");
+		}
+	}
+	derivationToStringSimpleInner(0, lines, derivation);
+	return lines.join("\n");
+}
+
+function leading(depth: number, label: string) {
+	return "| ".repeat(depth) + label.padEnd(6);
+}
+
+function derivationToStringSimpleInner(depth: number, lines: string[], derivation: Derivation | PrunedDerivation) {
+	const prefix = leading(depth, DERIVATION_RULE_NAMES[derivation.rule]);
+	if (derivation.rule === DerivationRule.Id) {
+		if (depth === 0) {
+			lines.push(prefix + " = " + ast.toString(derivation.after));
+		}
+		return;
+	}
+	if (derivation.rule === DerivationRule.Seq) {
+		for (let i = 0; i < derivation.children.length; i++) {
+			if (derivation.children[i].rule === DerivationRule.Id) continue;
+			derivationToStringSimpleInner(depth, lines, derivation.children[i]);
+		}
+		return;
+	}
+	if (derivation.rule === DerivationRule.Beta) {
+		lines.push(prefix + " > " + ast.toString(derivation.before));
+		lines.push(prefix + " < " + ast.toString(derivation.after));
+		return;
+	}
+	if (derivation.child.rule === DerivationRule.Id) {
+		lines.push(prefix + " = " + ast.toString(derivation.after));
+		return;
+	}
+	lines.push(prefix + " > " + ast.toString(derivation.before));
+	derivationToStringSimpleInner(depth + 1, lines, derivation.child);
+	lines.push(prefix + " < " + ast.toString(derivation.after));
+}
+
+type LambdaFrame =
+	| { rule: DerivationRule.Xi; lam: ast.Abstraction }
+	| { rule: DerivationRule.Nu | DerivationRule.Mu; expr: ast.Expression };
+
+type LambdaStep = {
+	path: LambdaFrame[]; // outermost first
+	redex: ast.Expression;
+	contractum: ast.Expression;
+};
+
+function derivationToSteps(d: Derivation): LambdaStep[] {
+	const within = (child: Derivation, frame: LambdaFrame) =>
+		derivationToSteps(child).map((s) => {
+			s.path.unshift(frame);
+			return s;
+		});
+	switch (d.rule) {
+		case DerivationRule.Id:
+			return [];
+		case DerivationRule.Beta:
+			return [{ path: [], redex: d.before, contractum: d.after }];
+		case DerivationRule.Nu:
+			return within(d.child, { rule: d.rule, expr: d.before.right });
+		case DerivationRule.Mu:
+			return within(d.child, { rule: d.rule, expr: d.before.left });
+		case DerivationRule.Xi:
+			return within(d.child, { rule: d.rule, lam: d.before });
+		case DerivationRule.Seq:
+			return d.children.flatMap(derivationToSteps);
+	}
+}
+
+function isAtom(expr: ast.Expression): boolean {
+	switch (expr.kind) {
+		case ast.ExpressionKind.Variable:
+			return true;
+		default:
+			return false;
+	}
+}
+
+function shouldParenthesizeLeft(expr: ast.Application): boolean {
+	return !isAtom(expr.left) && expr.left.kind !== ast.ExpressionKind.Application;
+}
+
+function shouldParenthesizeRight(expr: ast.Application): boolean {
+	return !isAtom(expr.right);
+}
+
+const space = piece(" ");
+const kw = (s: string) => piece(s, "keyword");
+const paren = (pieces: Piece[], b: boolean) => (b ? concat(piece("(", "paren"), pieces, piece(")", "paren")) : pieces);
+const HOLE: Piece = { text: "" };
+
+type Scope = (string | null)[]; // innermost last
+
+function bind(names: Names, scope: Scope, binder: Binder): Scope {
+	const name = names.get(binder) ?? null;
+	return [...scope, name === null ? null : freshName(scope, name)];
+}
+
+function exprToPieces(names: Names, scope: Scope, expr: ast.Expression, hole?: ast.Expression): Piece[] {
+	if (expr === hole) return [HOLE];
+	switch (expr.kind) {
+		case ast.ExpressionKind.Variable:
+			return piece(scope[scope.length - 1 - expr.index] ?? `#${expr.index.toString()}`, "variable");
+		case ast.ExpressionKind.Application:
+			return concat(
+				paren(exprToPieces(names, scope, expr.left, hole), shouldParenthesizeLeft(expr)),
+				space,
+				paren(exprToPieces(names, scope, expr.right, hole), shouldParenthesizeRight(expr)),
+			);
+		case ast.ExpressionKind.Abstraction: {
+			const inner = bind(names, scope, expr);
+			const name = inner[inner.length - 1];
+			return concat(kw("λ"), piece(name ?? ""), piece(".", "punctuation"), exprToPieces(names, inner, expr.body, hole));
+		}
+	}
+}
+
+const lambdaPlug =
+	(names: Names): Plug<ast.Expression, LambdaFrame> =>
+	(f, child) => {
+		switch (f.rule) {
+			case DerivationRule.Nu:
+				return ast.application(child, f.expr);
+			case DerivationRule.Mu:
+				return ast.application(f.expr, child);
+			case DerivationRule.Xi: {
+				const lam = ast.abstraction(child);
+				copyName(names, f.lam, lam);
+				return lam;
+			}
+		}
+	};
+
+function lambdaPrinter(
+	names: Names,
+	plug: Plug<ast.Expression, LambdaFrame>,
+	path: LambdaFrame[],
+	free: string[],
+): Printer<ast.Expression, LambdaFrame, Piece> {
+	const inScope = (scope: Scope) =>
+		holePrinter(
+			(expr: ast.Expression, hole?: ast.Expression) => exprToPieces(names, scope, expr, hole),
+			plug,
+			HOLE,
+			(f) => DERIVATION_RULE_NAMES[f.rule],
+		);
+	const outerScopes = new Map<LambdaFrame, Scope>();
+	let scope: Scope = free;
+	for (const f of path) {
+		outerScopes.set(f, scope);
+		if (f.rule === DerivationRule.Xi) scope = bind(names, scope, f.lam);
+	}
+	const focus = inScope(scope);
+	return {
+		print: focus.print,
+		printFrame: (f, child) => inScope(outerScopes.get(f) ?? []).printFrame(f, child),
+	};
+}
+
+export function writeDerivation(
+	writer: Writer<Piece>,
+	derivation: Derivation,
+	names: Names = new Map(),
+	free: string[] = [],
+	options: RenderOptions = {},
+) {
+	names = namesThrough(names, derivation);
+	const plug = lambdaPlug(names);
+	const lambdaSteps = derivationToSteps(derivation);
+	if (lambdaSteps.length === 0) {
+		for (const p of exprToPieces(names, free, derivation.after)) {
+			writer.write(p);
+		}
+		writer.break();
+		return;
+	}
+	const steps: Step<Piece>[] = lambdaSteps.map((s) => {
+		const printer = lambdaPrinter(names, plug, s.path, free);
+		return {
+			label: DERIVATION_RULE_NAMES[DerivationRule.Beta],
+			before: plugAll(plug, printer, s.redex, s.path)[0],
+			after: plugAll(plug, printer, s.contractum, s.path)[0],
+		};
+	});
+	renderDerivation(writer, steps, options);
+}
+
+export function derivationToString(
+	derivation: Derivation,
+	names?: Names,
+	free?: string[],
+	options: RenderOptions = {},
+): string {
+	const writer = stringWriter();
+	writeDerivation(writer, derivation, names, free, options);
+	return writer.output().trimEnd();
+}

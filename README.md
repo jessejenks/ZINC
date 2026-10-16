@@ -86,6 +86,59 @@ unboxed values. This was confusing to me at first, since it comes before his dis
 really discussing the implementation where closures receive a copy of the environment, rather than just pointing to a
 shared list.
 
+## Derivation Drawing
+
+This project also has a novel system for rendering derivations. It's a very general approach that can be used to render
+pretty much any linear derivation in a flexible way.
+
+For example, here's a normal order reduction of `(λn.n * n) (1 + 2)`.
+
+```
+(λn.n * n) (1 + 2)
+────────┬─────────
+        │ β
+────────┴────────
+(1 + 2) * (1 + 2)
+ ──┬──
+┌──┘ δ
+┴
+3 * (1 + 2)
+     ──┬──
+    ┌──┘ δ
+    ┴
+3 * 3
+──┬──
+┌─┘ δ
+┴
+9
+```
+
+There are several options for customizing rendering as well.
+
+```
+(λn.n * n) (1 + 2)
+────────┬─────────
+        │
+╭───────┴───────╮
+(1 + 2) * (1 + 2)
+ ──┬──
+╭──╯
+│
+3 * (1 + 2)
+     ──┬──
+    ╭──╯
+    │
+3 * 3
+──┬──
+╭─╯
+│
+9
+```
+
+Note that shadowed variables will have a prime added to their name when derivations are printed. For example `λx.λx.x`
+will be displayed as `λx.λx'.x'`. This can also occur from beta reduction, for instance `(λy.λx.y) (λx.x)` reduces to
+`λx.λx'.x'`.
+
 ## Building
 
 First install (dev) dependencies

@@ -35,15 +35,6 @@ export const enum DerivationRule {
 	Seq,
 }
 
-export const DERIVATION_RULE_NAMES: Record<DerivationRule, string> = {
-	[DerivationRule.Id]: "id",
-	[DerivationRule.Beta]: "β",
-	[DerivationRule.Nu]: "ν",
-	[DerivationRule.Mu]: "μ",
-	[DerivationRule.Xi]: "ξ",
-	[DerivationRule.Seq]: "seq",
-};
-
 export type IdDerivation = {
 	rule: DerivationRule.Id;
 	after: Expression;
@@ -155,45 +146,6 @@ const xiDerive = (expr: Abstraction, reduce: (expr: Expression) => Derivation): 
 		child,
 	};
 };
-
-export function derivationToString(derivation: Derivation): string {
-	const lines: string[] = [];
-	derivationToStringInner(0, lines, derivation);
-	return lines.join("\n");
-}
-
-function leading(depth: number, label: string) {
-	return "| ".repeat(depth) + label.padEnd(6);
-}
-
-function derivationToStringInner(depth: number, lines: string[], derivation: Derivation) {
-	const prefix = leading(depth, DERIVATION_RULE_NAMES[derivation.rule]);
-	if (derivation.rule === DerivationRule.Id) {
-		if (depth === 0) {
-			lines.push(prefix + " = " + ast.toString(derivation.after));
-		}
-		return;
-	}
-	if (derivation.rule === DerivationRule.Seq) {
-		for (let i = 0; i < derivation.children.length; i++) {
-			if (derivation.children[i].rule === DerivationRule.Id) continue;
-			derivationToStringInner(depth, lines, derivation.children[i]);
-		}
-		return;
-	}
-	if (derivation.rule === DerivationRule.Beta) {
-		lines.push(prefix + " > " + ast.toString(derivation.before));
-		lines.push(prefix + " < " + ast.toString(derivation.after));
-		return;
-	}
-	if (derivation.child.rule === DerivationRule.Id) {
-		lines.push(prefix + " = " + ast.toString(derivation.after));
-		return;
-	}
-	lines.push(prefix + " > " + ast.toString(derivation.before));
-	derivationToStringInner(depth + 1, lines, derivation.child);
-	lines.push(prefix + " < " + ast.toString(derivation.after));
-}
 
 export const callByName = (expr: Expression): Expression => {
 	switch (expr.kind) {
