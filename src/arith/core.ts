@@ -88,15 +88,15 @@ export function isBinary(expression: Expression): expression is Binary {
 export function toString(expression: Expression): string {
 	switch (expression.kind) {
 		case ExpressionKind.Unit:
-			return "unit";
+			return "()";
 		case ExpressionKind.Int:
-			return `(int ${expression.value.toString()})`;
+			return expression.value.toString();
 		case ExpressionKind.Variable:
-			return expression.index.toString();
+			return `#${expression.index.toString()}`;
 		case ExpressionKind.Application:
 			return `(${toString(expression.left)} ${toString(expression.right)})`;
 		case ExpressionKind.Abstraction:
-			return `(λ ${toString(expression.body)})`;
+			return `(λ.${toString(expression.body)})`;
 		case ExpressionKind.Unary:
 			switch (expression.op) {
 				case UnaryOp.Negate:
@@ -107,11 +107,11 @@ export function toString(expression: Expression): string {
 			const right = toString(expression.right);
 			switch (expression.op) {
 				case BinaryOp.Add:
-					return `(+ ${left} ${right})`;
+					return `(${left} + ${right})`;
 				case BinaryOp.Sub:
-					return `(- ${left} ${right})`;
+					return `(${left} - ${right})`;
 				case BinaryOp.Mul:
-					return `(* ${left} ${right})`;
+					return `(${left} * ${right})`;
 			}
 		}
 	}

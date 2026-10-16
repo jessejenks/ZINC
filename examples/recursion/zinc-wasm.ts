@@ -1,4 +1,4 @@
-import { ast, elaborate, parser, reduce, surface, zinc, zincWasm } from "../../src/recursion";
+import { ast, elaborate, parser, reduce, renderDerivation, surface, zinc, zincWasm } from "../../src/recursion";
 import * as wasmEncode from "../../src/utils/wasm/encode";
 
 const input = `\
@@ -12,7 +12,7 @@ console.log(ast.toString(expr));
 
 console.log("=== call by value derivation ===");
 const derivation = reduce.callByValueDerive(expr);
-console.log(reduce.derivationToString(derivation));
+console.log(renderDerivation.derivationToString(derivation));
 const reduced = derivation.after;
 console.log(ast.toString(reduced));
 console.log(surface.toString(elaborate.coreToSurface(reduced)));

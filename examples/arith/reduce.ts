@@ -1,4 +1,4 @@
-import { ast, reduce } from "../../src/arith";
+import { ast, reduce, renderDerivation } from "../../src/arith";
 import terms from "./example-terms";
 
 const ZERO = ast.abstraction(ast.abstraction(ast.variable(0)));
@@ -22,17 +22,14 @@ const strategies: [(expr: ast.Expression) => reduce.Derivation, string][] = [
 	[reduce.headReductionDerive, "head reduction"],
 ];
 for (let i = 0; i < expressions.length; i++) {
-	if (i > 0) {
-		console.log("===");
-	}
+	console.log("===");
+	console.log(ast.toString(expressions[i]));
 	for (let j = 0; j < strategies.length; j++) {
-		if (j > 0) {
-			console.log("---");
-		}
+		console.log("---");
 		const [f, name] = strategies[j];
 		console.log(name);
 		try {
-			console.log(reduce.derivationToString(f(expressions[i])));
+			console.log(renderDerivation.derivationToString(f(expressions[i])));
 		} catch (e) {
 			console.error(String(e));
 		}

@@ -37,10 +37,10 @@ export function isAbstraction(expression: Expression): expression is Abstraction
 export function toString(expression: Expression): string {
 	switch (expression.kind) {
 		case ExpressionKind.Variable:
-			return expression.index.toString();
+			return `#${expression.index.toString()}`;
 		case ExpressionKind.Application:
 			return `(${toString(expression.left)} ${toString(expression.right)})`;
 		case ExpressionKind.Abstraction:
-			return `(λ ${toString(expression.body)})`;
+			return `(λ.${toString(expression.body)})`;
 	}
 }

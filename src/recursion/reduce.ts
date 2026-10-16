@@ -84,26 +84,6 @@ export const enum DerivationRule {
 	Seq,
 }
 
-export const DERIVATION_RULE_NAMES: Record<DerivationRule, string> = {
-	[DerivationRule.Id]: "id",
-	[DerivationRule.Beta]: "β",
-	[DerivationRule.Delta]: "δ",
-	[DerivationRule.Zeta]: "ζ",
-	[DerivationRule.Fix]: "fix",
-	[DerivationRule.Iota]: "ι",
-	[DerivationRule.Nu]: "ν",
-	[DerivationRule.Mu]: "μ",
-	[DerivationRule.Xi]: "ξ",
-	[DerivationRule.LetBound]: "let",
-	[DerivationRule.LetBody]: "in",
-	[DerivationRule.IfCondition]: "if",
-	[DerivationRule.IfConsequence]: "then",
-	[DerivationRule.IfAlternative]: "else",
-	[DerivationRule.Unary]: "",
-	[DerivationRule.Binary]: "",
-	[DerivationRule.Seq]: "seq",
-};
-
 export type IdDerivation = {
 	rule: DerivationRule.Id;
 	after: Expression;
@@ -666,106 +646,6 @@ const binaryDerive = (expr: Binary, reduce: (expr: Expression) => Derivation): B
 	}
 	return cong;
 };
-
-export function derivationToString(derivation: Derivation): string {
-	const lines: string[] = [];
-	derivationToStringInner(0, lines, derivation);
-	return lines.join("\n");
-}
-
-function getLabel(derivation: Derivation) {
-	switch (derivation.rule) {
-		case DerivationRule.Unary:
-			switch (derivation.before.op) {
-				case ast.UnaryOp.Negate:
-					return "neg";
-				case ast.UnaryOp.BitNot:
-					return "bnot";
-				case ast.UnaryOp.Not:
-					return "not";
-			}
-		case DerivationRule.Binary:
-			switch (derivation.before.op) {
-				case ast.BinaryOp.Add:
-					return "add";
-				case ast.BinaryOp.Sub:
-					return "sub";
-				case ast.BinaryOp.Mul:
-					return "mul";
-				case ast.BinaryOp.Div:
-					return "div";
-				case ast.BinaryOp.Lt:
-					return "lt";
-				case ast.BinaryOp.Gt:
-					return "gt";
-				case ast.BinaryOp.Lte:
-					return "lte";
-				case ast.BinaryOp.Gte:
-					return "gte";
-				case ast.BinaryOp.Eq:
-					return "eq";
-				case ast.BinaryOp.BitAnd:
-					return "band";
-				case ast.BinaryOp.BitOr:
-					return "bor";
-				case ast.BinaryOp.And:
-					return "and";
-				case ast.BinaryOp.Or:
-					return "or";
-			}
-		default:
-			return DERIVATION_RULE_NAMES[derivation.rule];
-	}
-}
-
-function leading(depth: number, label: string) {
-	return "| ".repeat(depth) + label.padEnd(6);
-}
-
-function derivationToStringInner(depth: number, lines: string[], derivation: Derivation) {
-	const label = getLabel(derivation);
-	const prefix = leading(depth, label);
-	if (derivation.rule === DerivationRule.Id) {
-		if (depth === 0) {
-			lines.push(prefix + " = " + ast.toString(derivation.after));
-		}
-		return;
-	}
-	if (derivation.rule === DerivationRule.Seq) {
-		for (let i = 0; i < derivation.children.length; i++) {
-			if (derivation.children[i].rule === DerivationRule.Id) continue;
-			derivationToStringInner(depth, lines, derivation.children[i]);
-		}
-		return;
-	}
-	if (
-		derivation.rule === DerivationRule.Beta ||
-		derivation.rule === DerivationRule.Delta ||
-		derivation.rule === DerivationRule.Zeta ||
-		derivation.rule === DerivationRule.Fix ||
-		derivation.rule === DerivationRule.Iota
-	) {
-		lines.push(prefix + " > " + ast.toString(derivation.before));
-		lines.push(prefix + " < " + ast.toString(derivation.after));
-		return;
-	}
-	if (derivation.rule === DerivationRule.Binary) {
-		lines.push(prefix + " > " + ast.toString(derivation.before));
-		for (let i = 0; i < derivation.children.length; i++) {
-			if (derivation.children[i].rule === DerivationRule.Id) continue;
-			derivationToStringInner(depth + 1, lines, derivation.children[i]);
-		}
-		lines.push(prefix + " < " + ast.toString(derivation.after));
-		return;
-	}
-	if (derivation.child.rule === DerivationRule.Id) {
-		lines.push(prefix + " = " + ast.toString(derivation.after));
-		return;
-	}
-	lines.push(prefix + " > " + ast.toString(derivation.before));
-	derivationToStringInner(depth + 1, lines, derivation.child);
-	lines.push(prefix + " < " + ast.toString(derivation.after));
-}
 
 export const callByName = (expr: Expression): Expression => {
 	switch (expr.kind) {

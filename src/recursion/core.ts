@@ -135,17 +135,17 @@ export function isBinary(expression: Expression): expression is Binary {
 export function toString(expression: Expression): string {
 	switch (expression.kind) {
 		case ExpressionKind.Unit:
-			return "unit";
+			return "()";
 		case ExpressionKind.Bool:
 			return expression.value ? "true" : "false";
 		case ExpressionKind.Int:
-			return `(int ${expression.value.toString()})`;
+			return expression.value.toString();
 		case ExpressionKind.Variable:
-			return expression.index.toString();
+			return `#${expression.index.toString()}`;
 		case ExpressionKind.Application:
 			return `(${toString(expression.left)} ${toString(expression.right)})`;
 		case ExpressionKind.Abstraction:
-			return `(λ ${toString(expression.body)})`;
+			return `(λ.${toString(expression.body)})`;
 		case ExpressionKind.LetIn:
 			return `(let${expression.isRecursive ? " rec " : " "}${toString(expression.expr)} in ${toString(expression.body)})`;
 		case ExpressionKind.IfElse:
@@ -162,31 +162,31 @@ export function toString(expression: Expression): string {
 		case ExpressionKind.Binary:
 			switch (expression.op) {
 				case BinaryOp.Add:
-					return `(+ ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} + ${toString(expression.right)})`;
 				case BinaryOp.Sub:
-					return `(- ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} - ${toString(expression.right)})`;
 				case BinaryOp.Mul:
-					return `(* ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} * ${toString(expression.right)})`;
 				case BinaryOp.Div:
-					return `(/ ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} / ${toString(expression.right)})`;
 				case BinaryOp.Lt:
-					return `(< ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} < ${toString(expression.right)})`;
 				case BinaryOp.Gt:
-					return `(> ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} > ${toString(expression.right)})`;
 				case BinaryOp.Lte:
-					return `(<= ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} <= ${toString(expression.right)})`;
 				case BinaryOp.Gte:
-					return `(>= ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} >= ${toString(expression.right)})`;
 				case BinaryOp.Eq:
-					return `(== ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} == ${toString(expression.right)})`;
 				case BinaryOp.BitAnd:
-					return `(& ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} & ${toString(expression.right)})`;
 				case BinaryOp.BitOr:
-					return `(| ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} | ${toString(expression.right)})`;
 				case BinaryOp.And:
-					return `(&& ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} && ${toString(expression.right)})`;
 				case BinaryOp.Or:
-					return `(|| ${toString(expression.left)} ${toString(expression.right)})`;
+					return `(${toString(expression.left)} || ${toString(expression.right)})`;
 			}
 	}
 }
